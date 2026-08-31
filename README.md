@@ -32,7 +32,7 @@ For a detailed explanation of the interaction decision, constraint, and possible
 [https://genoroot-intake-lovat.vercel.app]
 
 **Evaluator structured output:**  
-[https://genoroot-intake-lovat.vercel.app/#/output]/#/output
+[https://genoroot-intake-lovat.vercel.app/#/output]
 
 **GitHub repository:**  
 [https://github.com/rchaithali/GenoRoot]
