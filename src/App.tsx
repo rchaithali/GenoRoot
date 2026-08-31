@@ -1,10 +1,15 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
+import LanguagePage from "./pages/LanguagePage";
 import IntakePageOne from "./pages/IntakePageOne";
 import IntakePageTwo from "./pages/IntakePageTwo";
 import IntakePageThree from "./pages/IntakePageThree";
 import IntakePageFour from "./pages/IntakePageFour";
 import IntakePageFive from "./pages/IntakePageFive";
+import DeveloperOutputPage from "./pages/DeveloperOutputPage";
 
 type IntakePage =
   | 1
@@ -15,9 +20,57 @@ type IntakePage =
 
 function App() {
   const [
+    languageSelected,
+    setLanguageSelected,
+  ] = useState(false);
+
+  const [
     currentPage,
     setCurrentPage,
   ] = useState<IntakePage>(1);
+
+  const [
+    currentHash,
+    setCurrentHash,
+  ] = useState(
+    window.location.hash
+  );
+
+  useEffect(() => {
+    function handleHashChange() {
+      setCurrentHash(
+        window.location.hash
+      );
+    }
+
+    window.addEventListener(
+      "hashchange",
+      handleHashChange
+    );
+
+    return () => {
+      window.removeEventListener(
+        "hashchange",
+        handleHashChange
+      );
+    };
+  }, []);
+
+  if (
+    currentHash === "#/output"
+  ) {
+    return <DeveloperOutputPage />;
+  }
+
+  if (!languageSelected) {
+    return (
+      <LanguagePage
+        onContinue={() =>
+          setLanguageSelected(true)
+        }
+      />
+    );
+  }
 
   if (currentPage === 1) {
     return (

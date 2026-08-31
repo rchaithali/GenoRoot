@@ -124,7 +124,7 @@ function IntakePageFive({
       const missing: string[] = [];
 
       /*
-       * Basic information
+       * Supporting patient context
        */
       if (intake.currentAge === null) {
         missing.push("Current age");
@@ -163,7 +163,9 @@ function IntakePageFive({
         );
       }
 
-      if (intake.pattern.length === 0) {
+      if (
+        intake.pattern.length === 0
+      ) {
         missing.push(
           "Hair loss pattern"
         );
@@ -222,7 +224,8 @@ function IntakePageFive({
        * Section C
        *
        * past_6_months can legitimately
-       * be empty if none apply.
+       * be empty because the supplied
+       * schema has no "None" option.
        */
       if (
         intake.habits.smoking === null
@@ -244,14 +247,18 @@ function IntakePageFive({
       if (
         intake.habits.alcohol === null
       ) {
-        missing.push("Alcohol use");
+        missing.push(
+          "Alcohol use"
+        );
       }
 
       if (
         intake.habits.hard_water ===
         null
       ) {
-        missing.push("Hard water");
+        missing.push(
+          "Hard water"
+        );
       }
 
       if (
@@ -296,11 +303,7 @@ function IntakePageFive({
       }
 
       /*
-       * Section D products.
-       *
-       * No selected products is allowed.
-       * If selected, all follow-ups
-       * must be completed.
+       * Section D products
        */
       productNames.forEach(
         (product) => {
@@ -339,11 +342,7 @@ function IntakePageFive({
       );
 
       /*
-       * Section D procedures.
-       *
-       * No selected procedures is allowed.
-       * If selected, all follow-ups
-       * must be completed.
+       * Section D procedures
        */
       procedureNames.forEach(
         (procedure) => {
@@ -409,9 +408,14 @@ function IntakePageFive({
       }
 
       /*
-       * Q16 is explicit.
+       * Q16
+       *
+       * Both Yes and No are complete
+       * answers. Only null is missing.
        */
-      if (intake.consent === null) {
+      if (
+        intake.consent === null
+      ) {
         missing.push(
           "Consent response"
         );
@@ -424,9 +428,13 @@ function IntakePageFive({
     missingRequiredAnswers.length ===
     0;
 
+  /*
+   * Consent = No is still a completed
+   * response and therefore does not
+   * block submission.
+   */
   const canSubmit =
-    formComplete &&
-    intake.consent === "Yes";
+    formComplete;
 
   function handleSubmit() {
     setAttemptedSubmit(true);
@@ -435,9 +443,14 @@ function IntakePageFive({
       return;
     }
 
-    if (intake.consent !== "Yes") {
-      return;
-    }
+    /*
+     * Store the exact structured output
+     * required for evaluator inspection.
+     */
+    sessionStorage.setItem(
+      "genoroot-final-output",
+      JSON.stringify(finalOutput)
+    );
 
     console.log(
       "GenoRoot final intake output:",
@@ -480,6 +493,21 @@ function IntakePageFive({
             Thank you. Your responses have
             been submitted successfully.
           </p>
+
+          {intake.consent === "No" && (
+            <div className="submission-consent-note">
+              <strong>
+                Sample collection not consented to
+              </strong>
+
+              <p>
+                Your intake has been completed,
+                but sample collection and genetic
+                analysis should not proceed
+                without your consent.
+              </p>
+            </div>
+          )}
         </main>
       </div>
     );
@@ -611,6 +639,35 @@ function IntakePageFive({
           </section>
         </div>
 
+        {/*
+         * Neutral informational note.
+         *
+         * No is a valid completed answer,
+         * but sample collection must not
+         * proceed without consent.
+         */}
+        {intake.consent === "No" && (
+          <div className="consent-note-card">
+            <div className="consent-note-card__icon">
+              i
+            </div>
+
+            <div>
+              <strong>
+                Sample collection is not consented to
+              </strong>
+
+              <p>
+                You can still complete and submit
+                your intake. However, the selected
+                sample should not be collected or
+                used for genetic analysis without
+                your consent.
+              </p>
+            </div>
+          </div>
+        )}
+
         {attemptedSubmit &&
           !formComplete && (
             <div className="missing-answer-card">
@@ -633,25 +690,6 @@ function IntakePageFive({
                 Use Back to return to the
                 relevant section, then come
                 back here to submit.
-              </p>
-            </div>
-          )}
-
-        {attemptedSubmit &&
-          formComplete &&
-          intake.consent === "No" && (
-            <div className="missing-answer-card">
-              <strong>
-                Consent is required to submit
-                this intake.
-              </strong>
-
-              <p>
-                You selected “No, I do not
-                consent”, so the intake cannot
-                be submitted for sample
-                collection and genetic
-                analysis.
               </p>
             </div>
           )}

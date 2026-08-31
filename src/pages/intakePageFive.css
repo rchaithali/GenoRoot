@@ -809,3 +809,89 @@
     gap: 3px;
   }
 }
+.consent-note-card {
+  width: 100%;
+  margin-top: 20px;
+  padding: 18px 20px;
+
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+
+  color: #3f484a;
+  background: #f1f4f5;
+
+  border: 1px solid #bfc8c9;
+  border-radius: 12px;
+}
+
+.consent-note-card__icon {
+  width: 28px;
+  height: 28px;
+
+  flex: 0 0 28px;
+
+  display: grid;
+  place-items: center;
+
+  color: #004349;
+  background: #d7e2e0;
+
+  border-radius: 999px;
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.consent-note-card strong {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #181c1d;
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.consent-note-card p {
+  margin: 0;
+
+  color: #3f484a;
+
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.submission-consent-note {
+  width: 100%;
+  max-width: 520px;
+
+  margin-top: 24px;
+  padding: 18px 20px;
+
+  color: #3f484a;
+  background: #f1f4f5;
+
+  border: 1px solid #bfc8c9;
+  border-radius: 12px;
+
+  text-align: left;
+}
+
+.submission-consent-note strong {
+  display: block;
+
+  margin-bottom: 6px;
+
+  color: #181c1d;
+
+  font-size: 15px;
+}
+
+.submission-consent-note p {
+  margin: 0;
+
+  font-size: 14px;
+  line-height: 21px;
+}

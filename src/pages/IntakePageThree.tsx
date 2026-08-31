@@ -67,13 +67,6 @@ interface SpeechRecognitionConstructor {
   new (): SpeechRecognitionInstance;
 }
 
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
 const pastSixMonthsOptions: PastSixMonths[] = [
   "Crash dieting or major weight loss",
   "High stress or emotional trauma",
@@ -87,6 +80,18 @@ const smokingSeverityOptions: SmokingSeverity[] = [
   "Moderate 5-10/day",
   "Severe >10/day",
 ];
+
+const smokingSeverityLabels: Record<
+  SmokingSeverity,
+  string
+> = {
+  "Mild <5/day":
+    "Less than 5 per day",
+  "Moderate 5-10/day":
+    "5–10 per day",
+  "Severe >10/day":
+    "More than 10 per day",
+};
 
 const hairWashOptions: HairWashFrequency[] = [
   "Daily",
@@ -108,20 +113,29 @@ const voiceQuestions: Record<
   VoiceQuestionId,
   string
 > = {
-  smoking: "Do you currently smoke?",
+  smoking:
+    "Do you currently smoke?",
+
   smoking_severity:
     "About how many cigarettes do you smoke per day?",
-  alcohol: "Do you drink alcohol?",
+
+  alcohol:
+    "Do you drink alcohol?",
+
   hard_water:
     "Do you regularly wash your hair with hard water?",
+
   hair_wash_frequency:
-    "How often do you wash your hair?",
+    "How often do you wash your hair? Daily, on alternate days, or weekly?",
+
   heating_tools_styling_chemicals:
     "Do you regularly use heat styling tools or styling chemicals on your hair?",
+
   salon_treatments:
-    "Have you had salon treatments such as colouring, straightening, smoothing, or similar chemical treatments?",
+    "Have you had salon treatments such as colouring, straightening, smoothing, keratin, or any similar chemical treatment?",
+
   salon_treatment_detail:
-    "What salon treatment did you have?",
+    "What salon treatment did you have? For example, colouring, straightening, smoothing, keratin, or something similar.",
 };
 
 function IntakePageThree({
@@ -141,21 +155,69 @@ function IntakePageThree({
   const [
     voiceQuestionId,
     setVoiceQuestionId,
-  ] = useState<VoiceQuestionId>("smoking");
+  ] = useState<VoiceQuestionId>(
+    "smoking"
+  );
 
-  const [voiceStatus, setVoiceStatus] =
-    useState<
-      "idle" | "speaking" | "listening" | "processing"
-    >("idle");
+  const [
+    voiceStatus,
+    setVoiceStatus,
+  ] = useState<
+    | "idle"
+    | "speaking"
+    | "listening"
+    | "processing"
+  >("idle");
 
-  const [transcript, setTranscript] =
-    useState("");
+  const [
+    transcript,
+    setTranscript,
+  ] = useState("");
 
-  const [voiceMessage, setVoiceMessage] =
-    useState("");
+  const [
+    voiceMessage,
+    setVoiceMessage,
+  ] = useState("");
+
+  const [
+    showVoiceFallback,
+    setShowVoiceFallback,
+  ] = useState(false);
+
+  const [
+    fallbackText,
+    setFallbackText,
+  ] = useState("");
 
   const recognitionRef =
     useRef<SpeechRecognitionInstance | null>(
+      null
+    );
+
+  const retryCountRef =
+    useRef(0);
+
+  const showVoiceFallbackRef =
+  useRef(false);
+
+  const voiceSessionActiveRef =
+    useRef(false);
+
+  const sessionIdRef =
+    useRef(0);
+
+  const transitionTimeoutRef =
+    useRef<number | null>(
+      null
+    );
+
+  const questionTimeoutRef =
+    useRef<number | null>(
+      null
+    );
+
+  const speechWatchTimeoutRef =
+    useRef<number | null>(
       null
     );
 
@@ -164,11 +226,17 @@ function IntakePageThree({
   ) {
     updateField(
       "past_6_months",
-      intake.past_6_months.includes(value)
+      intake.past_6_months.includes(
+        value
+      )
         ? intake.past_6_months.filter(
-            (item) => item !== value
+            (item) =>
+              item !== value
           )
-        : [...intake.past_6_months, value]
+        : [
+            ...intake.past_6_months,
+            value,
+          ]
     );
   }
 
@@ -177,89 +245,117 @@ function IntakePageThree({
   ) {
     return value
       .toLowerCase()
+      .replace(/[’']/g, "")
       .replace(/[.,!?]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
   }
 
+  function isUncertainAnswer(
+    value: string
+  ) {
+    const text =
+      normalizeSpeech(value);
+
+    const uncertainPhrases = [
+      "i dont know",
+      "i do not know",
+      "dont know",
+      "do not know",
+      "i dont remember",
+      "i do not remember",
+      "dont remember",
+      "do not remember",
+      "not sure",
+      "im not sure",
+      "unsure",
+      "maybe",
+      "probably",
+      "cant say",
+      "cannot say",
+      "no idea",
+    ];
+
+    return uncertainPhrases.some(
+      (phrase) =>
+        text.includes(phrase)
+    );
+  }
+
   function inferYesNo(
     value: string
   ): YesNo | null {
-    const text = normalizeSpeech(value);
+    if (
+      isUncertainAnswer(value)
+    ) {
+      return null;
+    }
 
-    const compact = text.replace(
-      /\s+/g,
-      ""
-    );
+    const text =
+      normalizeSpeech(value);
 
-    const noAnswers = [
-      "no",
-      "nope",
-      "nah",
-      "nahi",
-      "never",
-      "notreally",
-      "idon't",
-      "idont",
-      "idonot",
-    ];
+    /*
+     * A clear spoken "no" at the
+     * beginning counts as No.
+     *
+     * This fixes:
+     * "no I don't"
+     * "no I didn't"
+     * "no I haven't"
+     */
+    if (
+      /^no\b/.test(text) ||
+      /^nope\b/.test(text) ||
+      /^nah\b/.test(text)
+    ) {
+      return "No";
+    }
 
-    const yesAnswers = [
-      "yes",
-      "yeah",
-      "ya",
-      "yah",
-      "yep",
-      "yup",
-      "yea",
-      "sure",
-      "correct",
-      "ido",
-      "sometimes",
-      "occasionally",
-      "regularly",
+    const negativePatterns = [
+      /\bnever\b/,
+      /\bnot really\b/,
+      /\bnot at all\b/,
+
+      /\bi havent\b/,
+      /\bi have not\b/,
+
+      /\bi didnt\b/,
+      /\bi did not\b/,
+
+      /\bi dont\b/,
+      /\bi do not\b/,
+
+      /\bhavent had\b/,
+      /\bhave not had\b/,
+      /\bnever had\b/,
     ];
 
     if (
-      noAnswers.some(
-        (answer) =>
-          compact ===
-            answer.replace(/\s+/g, "") ||
-          compact.startsWith(
-            answer.replace(/\s+/g, "")
-          )
+      negativePatterns.some(
+        (pattern) =>
+          pattern.test(text)
       )
     ) {
       return "No";
     }
 
     if (
-      yesAnswers.some(
-        (answer) =>
-          compact ===
-            answer.replace(/\s+/g, "") ||
-          compact.startsWith(
-            answer.replace(/\s+/g, "")
-          )
-      )
-    ) {
-      return "Yes";
-    }
-
-    if (
-      text.includes("do not") ||
-      text.includes("don't") ||
-      text.includes("dont") ||
-      text.includes("never")
-    ) {
-      return "No";
-    }
-
-    if (
-      text.includes("yes") ||
-      text.includes("yeah") ||
-      text.includes("yep") ||
-      text.includes("yup")
+      /^yes\b/.test(text) ||
+      /^yeah\b/.test(text) ||
+      /^yep\b/.test(text) ||
+      /^yup\b/.test(text) ||
+      /^ya\b/.test(text) ||
+      /\byes\b/.test(text) ||
+      /\byeah\b/.test(text) ||
+      /\byep\b/.test(text) ||
+      /\byup\b/.test(text) ||
+      /\bi do\b/.test(text) ||
+      /\bof course\b/.test(text) ||
+      /\bsure\b/.test(text) ||
+      /\bdefinitely\b/.test(text) ||
+      /\bsometimes\b/.test(text) ||
+      /\boccasionally\b/.test(text) ||
+      /\bregularly\b/.test(text)
     ) {
       return "Yes";
     }
@@ -277,7 +373,9 @@ function IntakePageThree({
       text.match(/\d+/);
 
     if (digit) {
-      return Number(digit[0]);
+      return Number(
+        digit[0]
+      );
     }
 
     const numberWords: Record<
@@ -313,7 +411,9 @@ function IntakePageThree({
       numberWords
     )) {
       if (
-        text.split(" ").includes(word)
+        text
+          .split(" ")
+          .includes(word)
       ) {
         return number;
       }
@@ -325,10 +425,63 @@ function IntakePageThree({
   function inferSmokingSeverity(
     value: string
   ): SmokingSeverity | null {
+    if (
+      isUncertainAnswer(value)
+    ) {
+      return null;
+    }
+
+    const text =
+      normalizeSpeech(value);
+
+    if (
+      text.includes(
+        "less than five"
+      ) ||
+      text.includes(
+        "under five"
+      ) ||
+      text.includes(
+        "fewer than five"
+      )
+    ) {
+      return "Mild <5/day";
+    }
+
+    if (
+      text.includes(
+        "five to ten"
+      ) ||
+      text.includes(
+        "between five and ten"
+      ) ||
+      text.includes(
+        "5 to 10"
+      )
+    ) {
+      return "Moderate 5-10/day";
+    }
+
+    if (
+      text.includes(
+        "more than ten"
+      ) ||
+      text.includes(
+        "over ten"
+      ) ||
+      text.includes(
+        "above ten"
+      )
+    ) {
+      return "Severe >10/day";
+    }
+
     const count =
       extractCount(value);
 
-    if (count !== null) {
+    if (
+      count !== null
+    ) {
       if (count < 5) {
         return "Mild <5/day";
       }
@@ -340,90 +493,742 @@ function IntakePageThree({
       return "Severe >10/day";
     }
 
-    const text =
-      normalizeSpeech(value);
-
-    if (
-      text.includes("less than five") ||
-      text.includes("a few")
-    ) {
-      return "Mild <5/day";
-    }
-
-    if (
-      text.includes("five to ten") ||
-      text.includes("moderate")
-    ) {
-      return "Moderate 5-10/day";
-    }
-
-    if (
-      text.includes("more than ten") ||
-      text.includes("over ten") ||
-      text.includes("heavy")
-    ) {
-      return "Severe >10/day";
-    }
-
     return null;
   }
 
   function inferHairWashFrequency(
     value: string
   ): HairWashFrequency | null {
+    if (
+      isUncertainAnswer(value)
+    ) {
+      return null;
+    }
+
     const text =
       normalizeSpeech(value);
 
     if (
       text.includes("daily") ||
-      text.includes("every day") ||
-      text.includes("everyday")
+      text.includes(
+        "every day"
+      ) ||
+      text.includes(
+        "everyday"
+      ) ||
+      text.includes(
+        "once a day"
+      )
     ) {
       return "Daily";
     }
 
     if (
-      text.includes("alternate") ||
-      text.includes("every other day") ||
-      text.includes("every two days")
+      text.includes(
+        "alternate"
+      ) ||
+      text.includes(
+        "every other day"
+      ) ||
+      text.includes(
+        "every two days"
+      ) ||
+      text.includes(
+        "every 2 days"
+      ) ||
+      text.includes(
+        "once in two days"
+      )
     ) {
       return "Alternate Days";
     }
 
     if (
-      text.includes("weekly") ||
-      text.includes("once a week") ||
-      text.includes("twice a week") ||
-      text.includes("three times a week")
+      text.includes(
+        "weekly"
+      ) ||
+      text.includes(
+        "once a week"
+      ) ||
+      text.includes(
+        "once every week"
+      ) ||
+      text.includes(
+        "twice a week"
+      ) ||
+      text.includes(
+        "three times a week"
+      ) ||
+      text.includes(
+        "four times a week"
+      ) ||
+      text.includes(
+        "every week"
+      )
     ) {
       return "Weekly";
+    }
+
+    /*
+     * Output schema only supports:
+     * Daily
+     * Alternate Days
+     * Weekly
+     *
+     * So:
+     * every 3 days
+     * every 4 days
+     * every 5 days
+     * every 6 days
+     *
+     * normalize to Weekly.
+     */
+    if (
+      text.includes("day") ||
+      text.includes("days")
+    ) {
+      const dayCount =
+        extractCount(text);
+
+      if (
+        dayCount !== null
+      ) {
+        if (
+          dayCount <= 1
+        ) {
+          return "Daily";
+        }
+
+        if (
+          dayCount === 2
+        ) {
+          return "Alternate Days";
+        }
+
+        return "Weekly";
+      }
     }
 
     return null;
   }
 
-  function moveToQuestion(
-    next: VoiceQuestionId
-  ) {
-    setVoiceQuestionId(next);
-    setTranscript("");
-    setVoiceMessage("");
+  function clearVoiceTimeouts() {
+    if (
+      transitionTimeoutRef.current !==
+      null
+    ) {
+      window.clearTimeout(
+        transitionTimeoutRef.current
+      );
 
-    window.setTimeout(
-      () => speakQuestion(next),
-      80
+      transitionTimeoutRef.current =
+        null;
+    }
+
+    if (
+      questionTimeoutRef.current !==
+      null
+    ) {
+      window.clearTimeout(
+        questionTimeoutRef.current
+      );
+
+      questionTimeoutRef.current =
+        null;
+    }
+
+    if (
+      speechWatchTimeoutRef.current !==
+      null
+    ) {
+      window.clearTimeout(
+        speechWatchTimeoutRef.current
+      );
+
+      speechWatchTimeoutRef.current =
+        null;
+    }
+  }
+
+  function stopRecognition() {
+    const recognition =
+      recognitionRef.current;
+
+    recognitionRef.current =
+      null;
+
+    if (!recognition) {
+      return;
+    }
+
+    try {
+      recognition.onresult =
+        null;
+
+      recognition.onerror =
+        null;
+
+      recognition.onend =
+        null;
+
+      recognition.abort();
+    } catch {
+      // Already inactive.
+    }
+  }
+
+  function stopSpeaking() {
+    if (
+      "speechSynthesis" in
+      window
+    ) {
+      window.speechSynthesis.cancel();
+    }
+
+    if (
+      speechWatchTimeoutRef.current !==
+      null
+    ) {
+      window.clearTimeout(
+        speechWatchTimeoutRef.current
+      );
+
+      speechWatchTimeoutRef.current =
+        null;
+    }
+  }
+
+  function getPreferredVoice() {
+    if (
+      !(
+        "speechSynthesis" in
+        window
+      )
+    ) {
+      return null;
+    }
+
+    const voices =
+      window.speechSynthesis.getVoices();
+
+    return (
+      voices.find(
+        (voice) =>
+          voice.lang
+            .toLowerCase()
+            .startsWith(
+              "en-in"
+            )
+      ) ??
+      voices.find(
+        (voice) =>
+          voice.lang
+            .toLowerCase()
+            .startsWith(
+              "en-gb"
+            )
+      ) ??
+      voices.find(
+        (voice) =>
+          voice.lang
+            .toLowerCase()
+            .startsWith(
+              "en"
+            )
+      ) ??
+      null
     );
   }
 
-  function finishVoiceSession() {
+  function isCurrentSession(
+    sessionId: number
+  ) {
+    return (
+      voiceSessionActiveRef.current &&
+      sessionIdRef.current ===
+        sessionId
+    );
+  }
+
+  /*
+   * Chrome sometimes fails to fire
+   * utterance.onend reliably.
+   *
+   * This watcher gives us a second,
+   * guarded way to detect that speech
+   * actually stopped.
+   */
+  function waitForSpeechToFinish(
+    sessionId: number,
+    onFinished: () => void
+  ) {
+    let finished =
+      false;
+
+    function finishOnce() {
+      if (finished) {
+        return;
+      }
+
+      finished =
+        true;
+
+      if (
+        !isCurrentSession(
+          sessionId
+        )
+      ) {
+        return;
+      }
+
+      if (
+        speechWatchTimeoutRef.current !==
+        null
+      ) {
+        window.clearTimeout(
+          speechWatchTimeoutRef.current
+        );
+
+        speechWatchTimeoutRef.current =
+          null;
+      }
+
+      onFinished();
+    }
+
+    function watch() {
+      if (
+        !isCurrentSession(
+          sessionId
+        )
+      ) {
+        return;
+      }
+
+      if (
+        !(
+          "speechSynthesis" in
+          window
+        )
+      ) {
+        finishOnce();
+        return;
+      }
+
+      if (
+        !window.speechSynthesis.speaking &&
+        !window.speechSynthesis.pending
+      ) {
+        finishOnce();
+        return;
+      }
+
+      speechWatchTimeoutRef.current =
+        window.setTimeout(
+          watch,
+          100
+        );
+    }
+
+    speechWatchTimeoutRef.current =
+      window.setTimeout(
+        watch,
+        150
+      );
+
+    return finishOnce;
+  }
+
+  function getFallbackSpeech(
+    questionId: VoiceQuestionId
+  ) {
+    switch (
+      questionId
+    ) {
+      case "smoking":
+      case "alcohol":
+      case "hard_water":
+      case "heating_tools_styling_chemicals":
+      case "salon_treatments":
+        return "Please select Yes or No.";
+
+      case "smoking_severity":
+        return "Please select less than 5 per day, 5 to 10 per day, or more than 10 per day.";
+
+      case "hair_wash_frequency":
+        return "Please select Daily, Alternate Days, or Weekly.";
+
+      case "salon_treatment_detail":
+        return "Please type the salon treatment below. If you don't know or don't remember the name, you can enter that.";
+    }
+  }
+
+  function speakAndListen(
+    message: string,
+    questionId: VoiceQuestionId
+  ) {
+    if (
+      !voiceSessionActiveRef.current
+    ) {
+      return;
+    }
+
+    const sessionId =
+      sessionIdRef.current;
+
     stopRecognition();
+
     stopSpeaking();
 
-    setVoiceStatus("idle");
-    setMode("manual");
+    setVoiceMessage(
+      message
+    );
+
+    setVoiceStatus(
+      "speaking"
+    );
+
+    if (
+      !(
+        "speechSynthesis" in
+        window
+      )
+    ) {
+      setTranscript("");
+
+      setVoiceMessage("");
+
+      startListening(
+        questionId
+      );
+
+      return;
+    }
+
+    const utterance =
+      new SpeechSynthesisUtterance(
+        message
+      );
+
+    utterance.lang =
+      "en-IN";
+
+    utterance.rate =
+      1;
+
+    const voice =
+      getPreferredVoice();
+
+    if (voice) {
+      utterance.voice =
+        voice;
+    }
+
+    let resumed =
+      false;
+
+    function resumeListening() {
+      if (
+        resumed ||
+        !isCurrentSession(
+          sessionId
+        )
+      ) {
+        return;
+      }
+
+      resumed =
+        true;
+
+      setTranscript("");
+
+      setVoiceMessage("");
+
+      startListening(
+        questionId
+      );
+    }
+
+    const finishWatcher =
+      waitForSpeechToFinish(
+        sessionId,
+        resumeListening
+      );
+
+    utterance.onend =
+      () => {
+        finishWatcher();
+      };
+
+    utterance.onerror =
+      () => {
+        finishWatcher();
+      };
+
+    window.speechSynthesis.speak(
+      utterance
+    );
+  }
+
+  function showFallbackAndSpeak(
+    questionId: VoiceQuestionId
+  ) {
+    if (
+      !voiceSessionActiveRef.current
+    ) {
+      return;
+    }
+
+    const sessionId =
+      sessionIdRef.current;
+
+    stopRecognition();
+
+    stopSpeaking();
+    showVoiceFallbackRef.current =
+  true;
+
+    /*
+     * Show choices immediately.
+     */
+    setShowVoiceFallback(
+      true
+    );
+
+    const message =
+      getFallbackSpeech(
+        questionId
+      );
 
     setVoiceMessage(
-      "Voice section complete. You can review or edit your answers below."
+      message
+    );
+
+    setVoiceStatus(
+      "speaking"
+    );
+
+    if (
+      !(
+        "speechSynthesis" in
+        window
+      )
+    ) {
+      setVoiceStatus(
+        "idle"
+      );
+
+      return;
+    }
+
+    const utterance =
+      new SpeechSynthesisUtterance(
+        message
+      );
+
+    utterance.lang =
+      "en-IN";
+
+    utterance.rate =
+      1;
+
+    const voice =
+      getPreferredVoice();
+
+    if (voice) {
+      utterance.voice =
+        voice;
+    }
+
+    let finished =
+      false;
+
+    function finishFallbackSpeech() {
+      if (
+        finished ||
+        !isCurrentSession(
+          sessionId
+        )
+      ) {
+        return;
+      }
+
+      finished =
+        true;
+
+      setVoiceStatus(
+        "idle"
+      );
+    }
+
+    const finishWatcher =
+      waitForSpeechToFinish(
+        sessionId,
+        finishFallbackSpeech
+      );
+
+    utterance.onend =
+      finishWatcher;
+
+    utterance.onerror =
+      finishWatcher;
+
+    window.speechSynthesis.speak(
+      utterance
+    );
+  }
+
+  function handleUnclearAnswer(
+    questionId: VoiceQuestionId
+  ) {
+    if (
+  !voiceSessionActiveRef.current ||
+  showVoiceFallbackRef.current
+) {
+  return;
+}
+
+    retryCountRef.current +=
+      1;
+
+    /*
+     * Failure 1:
+     * automatic retry.
+     */
+    if (
+      retryCountRef.current === 1
+    ) {
+      speakAndListen(
+        "Sorry, I didn't catch that clearly. Please answer again.",
+        questionId
+      );
+
+      return;
+    }
+
+    /*
+     * Failure 2:
+     * show fallback immediately.
+     * No third recognition attempt.
+     */
+    showFallbackAndSpeak(
+      questionId
+    );
+  }
+
+  function resetRetryState() {
+  retryCountRef.current =
+    0;
+
+  showVoiceFallbackRef.current =
+    false;
+
+  setShowVoiceFallback(
+    false
+  );
+
+  setFallbackText("");
+
+  setVoiceMessage("");
+}
+
+  function moveToQuestion(
+    next: VoiceQuestionId
+  ) {
+    if (
+      !voiceSessionActiveRef.current
+    ) {
+      return;
+    }
+
+    const sessionId =
+      sessionIdRef.current;
+
+    resetRetryState();
+
+    clearVoiceTimeouts();
+
+    /*
+     * Keep recognized answer visible
+     * briefly before moving.
+     */
+    transitionTimeoutRef.current =
+      window.setTimeout(
+        () => {
+          if (
+            !isCurrentSession(
+              sessionId
+            )
+          ) {
+            return;
+          }
+
+          setVoiceQuestionId(
+            next
+          );
+
+          setTranscript("");
+
+          setVoiceMessage("");
+
+          questionTimeoutRef.current =
+            window.setTimeout(
+              () => {
+                if (
+                  !isCurrentSession(
+                    sessionId
+                  )
+                ) {
+                  return;
+                }
+
+                speakQuestion(
+                  next
+                );
+              },
+              50
+            );
+        },
+        500
+      );
+  }
+
+  function endVoiceSession() {
+    voiceSessionActiveRef.current =
+      false;
+
+    sessionIdRef.current +=
+      1;
+
+    clearVoiceTimeouts();
+
+    stopRecognition();
+
+    stopSpeaking();
+
+    retryCountRef.current =
+      0;
+
+    setVoiceStatus(
+      "idle"
+    );
+
+    setTranscript("");
+
+    setVoiceMessage("");
+
+    setShowVoiceFallback(
+      false
+    );
+
+    setFallbackText("");
+  }
+
+  function finishVoiceSession() {
+    endVoiceSession();
+
+    setMode(
+      "manual"
     );
   }
 
@@ -431,50 +1236,115 @@ function IntakePageThree({
     questionId: VoiceQuestionId,
     raw: string
   ) {
-    const answer = raw.trim();
-
-    if (!answer) {
-      setVoiceStatus("idle");
-      setVoiceMessage(
-        "I didn't hear an answer. Tap the microphone to try again."
-      );
+    if (
+      !voiceSessionActiveRef.current
+    ) {
       return;
     }
 
-    setVoiceStatus("processing");
+    const answer =
+      raw.trim();
 
-    if (questionId === "smoking") {
-      const severity =
-        inferSmokingSeverity(answer);
+    if (!answer) {
+      handleUnclearAnswer(
+        questionId
+      );
 
-      if (severity) {
-        updateHabit("smoking", "Yes");
+      return;
+    }
+
+    /*
+     * Final salon treatment detail
+     * is free text.
+     *
+     * "I don't know"
+     * and
+     * "I don't remember"
+     * are valid here.
+     */
+    if (
+      questionId ===
+      "salon_treatment_detail"
+    ) {
+      if (
+        answer.length >= 2
+      ) {
         updateHabit(
-          "smoking_severity",
-          severity
+          "salon_treatment_detail",
+          answer
         );
-        moveToQuestion("alcohol");
+
+        finishVoiceSession();
+
         return;
       }
 
+      handleUnclearAnswer(
+        questionId
+      );
+
+      return;
+    }
+
+    /*
+     * Closed questions:
+     * uncertainty is not No.
+     */
+    if (
+      isUncertainAnswer(
+        answer
+      )
+    ) {
+      handleUnclearAnswer(
+        questionId
+      );
+
+      return;
+    }
+
+    setVoiceStatus(
+      "processing"
+    );
+
+    if (
+      questionId ===
+      "smoking"
+    ) {
       const yesNo =
         inferYesNo(answer);
 
-      if (yesNo === "No") {
-        updateHabit("smoking", "No");
+      if (
+        yesNo === "No"
+      ) {
+        updateHabit(
+          "smoking",
+          "No"
+        );
+
         updateHabit(
           "smoking_severity",
           null
         );
-        moveToQuestion("alcohol");
+
+        moveToQuestion(
+          "alcohol"
+        );
+
         return;
       }
 
-      if (yesNo === "Yes") {
-        updateHabit("smoking", "Yes");
+      if (
+        yesNo === "Yes"
+      ) {
+        updateHabit(
+          "smoking",
+          "Yes"
+        );
+
         moveToQuestion(
           "smoking_severity"
         );
+
         return;
       }
     }
@@ -484,31 +1354,48 @@ function IntakePageThree({
       "smoking_severity"
     ) {
       const severity =
-        inferSmokingSeverity(answer);
+        inferSmokingSeverity(
+          answer
+        );
 
       if (severity) {
         updateHabit(
           "smoking_severity",
           severity
         );
-        moveToQuestion("alcohol");
-        return;
-      }
-    }
 
-    if (questionId === "alcohol") {
-      const yesNo =
-        inferYesNo(answer);
+        moveToQuestion(
+          "alcohol"
+        );
 
-      if (yesNo) {
-        updateHabit("alcohol", yesNo);
-        moveToQuestion("hard_water");
         return;
       }
     }
 
     if (
-      questionId === "hard_water"
+      questionId ===
+      "alcohol"
+    ) {
+      const yesNo =
+        inferYesNo(answer);
+
+      if (yesNo) {
+        updateHabit(
+          "alcohol",
+          yesNo
+        );
+
+        moveToQuestion(
+          "hard_water"
+        );
+
+        return;
+      }
+    }
+
+    if (
+      questionId ===
+      "hard_water"
     ) {
       const yesNo =
         inferYesNo(answer);
@@ -518,9 +1405,11 @@ function IntakePageThree({
           "hard_water",
           yesNo
         );
+
         moveToQuestion(
           "hair_wash_frequency"
         );
+
         return;
       }
     }
@@ -543,6 +1432,7 @@ function IntakePageThree({
         moveToQuestion(
           "heating_tools_styling_chemicals"
         );
+
         return;
       }
     }
@@ -563,6 +1453,7 @@ function IntakePageThree({
         moveToQuestion(
           "salon_treatments"
         );
+
         return;
       }
     }
@@ -574,7 +1465,9 @@ function IntakePageThree({
       const yesNo =
         inferYesNo(answer);
 
-      if (yesNo === "No") {
+      if (
+        yesNo === "No"
+      ) {
         updateHabit(
           "salon_treatments",
           "No"
@@ -586,10 +1479,13 @@ function IntakePageThree({
         );
 
         finishVoiceSession();
+
         return;
       }
 
-      if (yesNo === "Yes") {
+      if (
+        yesNo === "Yes"
+      ) {
         updateHabit(
           "salon_treatments",
           "Yes"
@@ -598,225 +1494,275 @@ function IntakePageThree({
         moveToQuestion(
           "salon_treatment_detail"
         );
+
         return;
       }
     }
 
-    if (
-      questionId ===
-      "salon_treatment_detail"
-    ) {
-      if (answer.length >= 2) {
-        updateHabit(
-          "salon_treatment_detail",
-          answer
-        );
-
-        finishVoiceSession();
-        return;
-      }
-    }
-
-    setVoiceStatus("idle");
-
-    setVoiceMessage(
-      "I couldn't confidently understand that. Tap the microphone to try again or switch to manual."
+    handleUnclearAnswer(
+      questionId
     );
-  }
-
-  function stopRecognition() {
-    if (!recognitionRef.current) {
-      return;
-    }
-
-    try {
-      recognitionRef.current.stop();
-    } catch {
-      // Already stopped.
-    }
-
-    recognitionRef.current = null;
   }
 
   function startListening(
     questionId: VoiceQuestionId
   ) {
+    if (
+  !voiceSessionActiveRef.current ||
+  showVoiceFallbackRef.current
+) {
+  return;
+}
+
+    /*
+     * Local typing only.
+     * Avoids duplicate global declarations
+     * with Page 4.
+     */
+    const speechWindow =
+      window as Window & {
+        SpeechRecognition?:
+          SpeechRecognitionConstructor;
+
+        webkitSpeechRecognition?:
+          SpeechRecognitionConstructor;
+      };
+
     const Recognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
+      speechWindow.SpeechRecognition ||
+      speechWindow.webkitSpeechRecognition;
 
     if (!Recognition) {
-      setVoiceStatus("idle");
-
-      setVoiceMessage(
-        "Voice input isn't supported in this browser. Please switch to manual."
+      showFallbackAndSpeak(
+        questionId
       );
+
       return;
     }
 
     stopRecognition();
 
+    if (
+      !voiceSessionActiveRef.current
+    ) {
+      return;
+    }
+
     const recognition =
       new Recognition();
 
-    recognition.lang = "en-IN";
-    recognition.continuous = false;
-    recognition.interimResults = true;
+    recognition.lang =
+      "en-IN";
+
+    recognition.continuous =
+      false;
+
+    recognition.interimResults =
+      true;
 
     recognitionRef.current =
       recognition;
 
     let finalText = "";
     let handled = false;
+    let failed = false;
 
-    recognition.onresult = (
-      event
-    ) => {
-      let interim = "";
-
-      for (
-        let i = 0;
-        i < event.results.length;
-        i += 1
-      ) {
-        const result =
-          event.results[i];
-
-        const resultText =
-          result[0]?.transcript ?? "";
-
-        if (result.isFinal) {
-          finalText += resultText;
-        } else {
-          interim += resultText;
+    recognition.onresult =
+      (event) => {
+        if (
+          !voiceSessionActiveRef.current
+        ) {
+          return;
         }
-      }
 
-      setTranscript(
-        (finalText || interim).trim()
-      );
+        let interim = "";
 
-      if (
-        finalText.trim() &&
-        !handled
-      ) {
-        handled = true;
+        for (
+          let i = 0;
+          i <
+          event.results.length;
+          i += 1
+        ) {
+          const result =
+            event.results[i];
 
-        processVoiceAnswer(
-          questionId,
-          finalText.trim()
+          const resultText =
+            result[0]
+              ?.transcript ??
+            "";
+
+          if (
+            result.isFinal
+          ) {
+            finalText +=
+              resultText;
+          } else {
+            interim +=
+              resultText;
+          }
+        }
+
+        const visibleText =
+          (
+            finalText ||
+            interim
+          ).trim();
+
+        setTranscript(
+          visibleText
         );
-      }
-    };
 
-    recognition.onerror = (
-      event
-    ) => {
-      recognitionRef.current = null;
-      setVoiceStatus("idle");
+        if (
+          finalText.trim() &&
+          !handled
+        ) {
+          handled =
+            true;
 
-      if (
-        event.error ===
-          "not-allowed" ||
-        event.error ===
-          "service-not-allowed"
-      ) {
-        setVoiceMessage(
-          "Microphone permission is required for voice answers."
+          processVoiceAnswer(
+            questionId,
+            finalText.trim()
+          );
+        }
+      };
+
+    recognition.onerror =
+      (event) => {
+        failed =
+          true;
+
+        if (
+          recognitionRef.current ===
+          recognition
+        ) {
+          recognitionRef.current =
+            null;
+        }
+
+        if (
+          !voiceSessionActiveRef.current ||
+          event.error ===
+            "aborted"
+        ) {
+          return;
+        }
+
+        if (
+          event.error ===
+            "not-allowed" ||
+          event.error ===
+            "service-not-allowed"
+        ) {
+          setVoiceStatus(
+            "idle"
+          );
+
+          setVoiceMessage(
+            "Microphone permission is required for voice answers."
+          );
+
+          return;
+        }
+
+        handleUnclearAnswer(
+          questionId
         );
-        return;
-      }
+      };
 
-      if (
-        event.error === "no-speech"
-      ) {
-        setVoiceMessage(
-          "I didn't hear anything. Tap the microphone and try again."
-        );
-        return;
-      }
+    recognition.onend =
+      () => {
+        if (
+          recognitionRef.current ===
+          recognition
+        ) {
+          recognitionRef.current =
+            null;
+        }
 
-      setVoiceMessage(
-        "I couldn't capture that clearly. Tap the microphone to try again."
-      );
-    };
+        if (
+          !voiceSessionActiveRef.current
+        ) {
+          return;
+        }
 
-    recognition.onend = () => {
-      recognitionRef.current = null;
+        if (failed) {
+          return;
+        }
 
-      if (!handled) {
-        setVoiceStatus("idle");
-      }
-    };
+        if (!handled) {
+          handleUnclearAnswer(
+            questionId
+          );
+        }
+      };
 
     try {
       recognition.start();
-      setVoiceStatus("listening");
+
+      if (
+        voiceSessionActiveRef.current
+      ) {
+        setVoiceStatus(
+          "listening"
+        );
+      }
     } catch {
-      setVoiceStatus("idle");
+      if (
+        recognitionRef.current ===
+        recognition
+      ) {
+        recognitionRef.current =
+          null;
+      }
 
-      setVoiceMessage(
-        "The microphone couldn't start. Tap it to try again."
-      );
+      if (
+        voiceSessionActiveRef.current
+      ) {
+        handleUnclearAnswer(
+          questionId
+        );
+      }
     }
-  }
-
-  function stopSpeaking() {
-    if (
-      "speechSynthesis" in window
-    ) {
-      window.speechSynthesis.cancel();
-    }
-  }
-
-  function getPreferredVoice() {
-    if (
-      !(
-        "speechSynthesis" in window
-      )
-    ) {
-      return null;
-    }
-
-    const voices =
-      window.speechSynthesis.getVoices();
-
-    return (
-      voices.find((voice) =>
-        voice.lang
-          .toLowerCase()
-          .startsWith("en-in")
-      ) ??
-      voices.find((voice) =>
-        voice.lang
-          .toLowerCase()
-          .startsWith("en-gb")
-      ) ??
-      voices.find((voice) =>
-        voice.lang
-          .toLowerCase()
-          .startsWith("en")
-      ) ??
-      null
-    );
   }
 
   function speakQuestion(
     questionId: VoiceQuestionId
   ) {
+    if (
+      !voiceSessionActiveRef.current
+    ) {
+      return;
+    }
+
+    const sessionId =
+      sessionIdRef.current;
+
     stopRecognition();
+
     stopSpeaking();
 
     setTranscript("");
+
     setVoiceMessage("");
-    setVoiceStatus("speaking");
+
+    setShowVoiceFallback(
+      false
+    );
+
+    setVoiceStatus(
+      "speaking"
+    );
 
     if (
       !(
-        "speechSynthesis" in window
+        "speechSynthesis" in
+        window
       )
     ) {
-      startListening(questionId);
+      startListening(
+        questionId
+      );
+
       return;
     }
 
@@ -827,23 +1773,52 @@ function IntakePageThree({
         ]
       );
 
-    utterance.lang = "en-IN";
-    utterance.rate = 1;
+    utterance.lang =
+      "en-IN";
+
+    utterance.rate =
+      1;
 
     const voice =
       getPreferredVoice();
 
     if (voice) {
-      utterance.voice = voice;
+      utterance.voice =
+        voice;
     }
 
-    utterance.onend = () => {
-      startListening(questionId);
-    };
+    let resumed =
+      false;
 
-    utterance.onerror = () => {
-      startListening(questionId);
-    };
+    function resumeListening() {
+      if (
+        resumed ||
+        !isCurrentSession(
+          sessionId
+        )
+      ) {
+        return;
+      }
+
+      resumed =
+        true;
+
+      startListening(
+        questionId
+      );
+    }
+
+    const finishWatcher =
+      waitForSpeechToFinish(
+        sessionId,
+        resumeListening
+      );
+
+    utterance.onend =
+      finishWatcher;
+
+    utterance.onerror =
+      finishWatcher;
 
     window.speechSynthesis.speak(
       utterance
@@ -854,38 +1829,40 @@ function IntakePageThree({
     | VoiceQuestionId
     | null {
     if (
-      intake.habits.smoking ===
-      null
+      intake.habits
+        .smoking === null
     ) {
       return "smoking";
     }
 
     if (
-      intake.habits.smoking ===
-        "Yes" &&
       intake.habits
-        .smoking_severity === null
+        .smoking === "Yes" &&
+      intake.habits
+        .smoking_severity ===
+        null
     ) {
       return "smoking_severity";
     }
 
     if (
-      intake.habits.alcohol ===
-      null
+      intake.habits
+        .alcohol === null
     ) {
       return "alcohol";
     }
 
     if (
-      intake.habits.hard_water ===
-      null
+      intake.habits
+        .hard_water === null
     ) {
       return "hard_water";
     }
 
     if (
       intake.habits
-        .hair_wash_frequency === null
+        .hair_wash_frequency ===
+        null
     ) {
       return "hair_wash_frequency";
     }
@@ -893,14 +1870,15 @@ function IntakePageThree({
     if (
       intake.habits
         .heating_tools_styling_chemicals ===
-      null
+        null
     ) {
       return "heating_tools_styling_chemicals";
     }
 
     if (
       intake.habits
-        .salon_treatments === null
+        .salon_treatments ===
+        null
     ) {
       return "salon_treatments";
     }
@@ -910,7 +1888,8 @@ function IntakePageThree({
         .salon_treatments ===
         "Yes" &&
       !intake.habits
-        .salon_treatment_detail.trim()
+        .salon_treatment_detail
+        .trim()
     ) {
       return "salon_treatment_detail";
     }
@@ -923,31 +1902,491 @@ function IntakePageThree({
       firstUnansweredVoiceQuestion();
 
     if (!first) {
-      setMode("manual");
+      setMode(
+        "manual"
+      );
+
       return;
     }
 
-    setMode("voice");
-    setVoiceQuestionId(first);
+    endVoiceSession();
 
-    window.setTimeout(
-      () => speakQuestion(first),
-      50
+    sessionIdRef.current +=
+      1;
+
+    voiceSessionActiveRef.current =
+      true;
+
+    retryCountRef.current =
+      0;
+
+    setMode(
+      "voice"
     );
+
+    setVoiceQuestionId(
+      first
+    );
+
+    setTranscript("");
+
+    setVoiceMessage("");
+
+    setShowVoiceFallback(
+      false
+    );
+
+    const sessionId =
+      sessionIdRef.current;
+
+    questionTimeoutRef.current =
+      window.setTimeout(
+        () => {
+          if (
+            !isCurrentSession(
+              sessionId
+            )
+          ) {
+            return;
+          }
+
+          speakQuestion(
+            first
+          );
+        },
+        50
+      );
   }
 
   function stopVoiceSession() {
+    endVoiceSession();
+
+    setMode(
+      "manual"
+    );
+  }
+
+  function handleBack() {
+    endVoiceSession();
+
+    onBack();
+  }
+
+  function handleContinue() {
+    endVoiceSession();
+
+    onContinue();
+  }
+
+  function prepareFallbackSelection() {
     stopRecognition();
+
     stopSpeaking();
 
-    setVoiceStatus("idle");
-    setMode("manual");
+    retryCountRef.current =
+      0;
+
+    setVoiceMessage("");
+
+    setShowVoiceFallback(
+      false
+    );
+
+    setVoiceStatus(
+      "processing"
+    );
+  }
+
+  function handleFallbackYesNo(
+    value: YesNo
+  ) {
+    const questionId =
+      voiceQuestionId;
+
+    prepareFallbackSelection();
+
+    if (
+      questionId ===
+      "smoking"
+    ) {
+      updateHabit(
+        "smoking",
+        value
+      );
+
+      if (
+        value === "No"
+      ) {
+        updateHabit(
+          "smoking_severity",
+          null
+        );
+
+        moveToQuestion(
+          "alcohol"
+        );
+
+        return;
+      }
+
+      moveToQuestion(
+        "smoking_severity"
+      );
+
+      return;
+    }
+
+    if (
+      questionId ===
+      "alcohol"
+    ) {
+      updateHabit(
+        "alcohol",
+        value
+      );
+
+      moveToQuestion(
+        "hard_water"
+      );
+
+      return;
+    }
+
+    if (
+      questionId ===
+      "hard_water"
+    ) {
+      updateHabit(
+        "hard_water",
+        value
+      );
+
+      moveToQuestion(
+        "hair_wash_frequency"
+      );
+
+      return;
+    }
+
+    if (
+      questionId ===
+      "heating_tools_styling_chemicals"
+    ) {
+      updateHabit(
+        "heating_tools_styling_chemicals",
+        value
+      );
+
+      moveToQuestion(
+        "salon_treatments"
+      );
+
+      return;
+    }
+
+    if (
+      questionId ===
+      "salon_treatments"
+    ) {
+      updateHabit(
+        "salon_treatments",
+        value
+      );
+
+      if (
+        value === "No"
+      ) {
+        updateHabit(
+          "salon_treatment_detail",
+          ""
+        );
+
+        finishVoiceSession();
+
+        return;
+      }
+
+      moveToQuestion(
+        "salon_treatment_detail"
+      );
+    }
+  }
+
+  function renderVoiceFallback() {
+    if (
+      !showVoiceFallback
+    ) {
+      return null;
+    }
+
+    const isYesNoQuestion =
+      voiceQuestionId ===
+        "smoking" ||
+      voiceQuestionId ===
+        "alcohol" ||
+      voiceQuestionId ===
+        "hard_water" ||
+      voiceQuestionId ===
+        "heating_tools_styling_chemicals" ||
+      voiceQuestionId ===
+        "salon_treatments";
+
+    if (isYesNoQuestion) {
+      return (
+        <div
+          className="mode-grid"
+          style={{
+            width: "100%",
+            maxWidth: "520px",
+            marginTop: "20px",
+          }}
+        >
+          {(
+            [
+              "Yes",
+              "No",
+            ] as YesNo[]
+          ).map(
+            (option) => (
+              <button
+                key={
+                  option
+                }
+                type="button"
+                className="habit-choice"
+                onClick={() =>
+                  handleFallbackYesNo(
+                    option
+                  )
+                }
+              >
+                {option}
+              </button>
+            )
+          )}
+        </div>
+      );
+    }
+
+    if (
+      voiceQuestionId ===
+      "smoking_severity"
+    ) {
+      return (
+        <div
+          className="three-choice-grid"
+          style={{
+            width: "100%",
+            maxWidth: "620px",
+            marginTop: "20px",
+          }}
+        >
+          {smokingSeverityOptions.map(
+            (option) => (
+              <button
+                key={
+                  option
+                }
+                type="button"
+                className="habit-choice"
+                onClick={() => {
+                  prepareFallbackSelection();
+
+                  updateHabit(
+                    "smoking_severity",
+                    option
+                  );
+
+                  moveToQuestion(
+                    "alcohol"
+                  );
+                }}
+              >
+                {
+                  smokingSeverityLabels[
+                    option
+                  ]
+                }
+              </button>
+            )
+          )}
+        </div>
+      );
+    }
+
+    if (
+      voiceQuestionId ===
+      "hair_wash_frequency"
+    ) {
+      return (
+        <div
+          className="three-choice-grid"
+          style={{
+            width: "100%",
+            maxWidth: "620px",
+            marginTop: "20px",
+          }}
+        >
+          {hairWashOptions.map(
+            (option) => (
+              <button
+                key={
+                  option
+                }
+                type="button"
+                className="habit-choice"
+                onClick={() => {
+                  prepareFallbackSelection();
+
+                  updateHabit(
+                    "hair_wash_frequency",
+                    option
+                  );
+
+                  moveToQuestion(
+                    "heating_tools_styling_chemicals"
+                  );
+                }}
+              >
+                {option}
+              </button>
+            )
+          )}
+        </div>
+      );
+    }
+
+    if (
+      voiceQuestionId ===
+      "salon_treatment_detail"
+    ) {
+      return (
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "520px",
+            marginTop: "20px",
+          }}
+        >
+          <input
+            type="text"
+            className="salon-detail-input"
+            autoComplete="off"
+            value={
+              fallbackText
+            }
+            onChange={(event) =>
+              setFallbackText(
+                event.target.value
+              )
+            }
+            placeholder="For example, keratin treatment, or I don't remember the name"
+          />
+
+          <button
+            type="button"
+            className="page-three-continue"
+            style={{
+              width: "100%",
+              marginTop: "12px",
+            }}
+            disabled={
+              fallbackText
+                .trim()
+                .length === 0
+            }
+            onClick={() => {
+              const value =
+                fallbackText.trim();
+
+              if (!value) {
+                return;
+              }
+
+              prepareFallbackSelection();
+
+              updateHabit(
+                "salon_treatment_detail",
+                value
+              );
+
+              finishVoiceSession();
+            }}
+          >
+            Continue
+            <span>→</span>
+          </button>
+        </div>
+      );
+    }
+
+    return null;
   }
 
   useEffect(() => {
     return () => {
-      stopRecognition();
-      stopSpeaking();
+      voiceSessionActiveRef.current =
+        false;
+
+      sessionIdRef.current +=
+        1;
+
+      if (
+        transitionTimeoutRef.current !==
+        null
+      ) {
+        window.clearTimeout(
+          transitionTimeoutRef.current
+        );
+      }
+
+      if (
+        questionTimeoutRef.current !==
+        null
+      ) {
+        window.clearTimeout(
+          questionTimeoutRef.current
+        );
+      }
+
+      if (
+        speechWatchTimeoutRef.current !==
+        null
+      ) {
+        window.clearTimeout(
+          speechWatchTimeoutRef.current
+        );
+      }
+
+      const recognition =
+        recognitionRef.current;
+
+      recognitionRef.current =
+        null;
+
+      if (recognition) {
+        try {
+          recognition.onresult =
+            null;
+
+          recognition.onerror =
+            null;
+
+          recognition.onend =
+            null;
+
+          recognition.abort();
+        } catch {
+          // Already inactive.
+        }
+      }
+
+      if (
+        "speechSynthesis" in
+        window
+      ) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
@@ -1008,7 +2447,9 @@ function IntakePageThree({
 
                   return (
                     <button
-                      key={option}
+                      key={
+                        option
+                      }
                       type="button"
                       onClick={() =>
                         togglePastSixMonths(
@@ -1022,10 +2463,13 @@ function IntakePageThree({
                       }`}
                     >
                       <span className="page-three-checkbox">
-                        {selected && "✓"}
+                        {selected &&
+                          "✓"}
                       </span>
 
-                      <span>{option}</span>
+                      <span>
+                        {option}
+                      </span>
                     </button>
                   );
                 }
@@ -1048,7 +2492,8 @@ function IntakePageThree({
                 </p>
               </div>
 
-              {mode === "manual" && (
+              {mode ===
+                "manual" && (
                 <button
                   type="button"
                   className="inline-mode-switch"
@@ -1061,7 +2506,8 @@ function IntakePageThree({
               )}
             </div>
 
-            {mode === "choose" && (
+            {mode ===
+              "choose" && (
               <div className="mode-selector">
                 <p>
                   How would you prefer to
@@ -1093,9 +2539,13 @@ function IntakePageThree({
                   <button
                     type="button"
                     className="mode-card"
-                    onClick={() =>
-                      setMode("manual")
-                    }
+                    onClick={() => {
+                      endVoiceSession();
+
+                      setMode(
+                        "manual"
+                      );
+                    }}
                   >
                     <span className="mode-icon">
                       ⌨
@@ -1113,22 +2563,37 @@ function IntakePageThree({
               </div>
             )}
 
-            {mode === "manual" && (
+            {mode ===
+              "manual" && (
               <div className="manual-habits-form">
                 <YesNoField
                   question="Do you currently smoke?"
                   value={
-                    intake.habits.smoking
+                    intake.habits
+                      .smoking
                   }
-                  onSelect={(value) =>
+                  onSelect={(
+                    value
+                  ) => {
                     updateHabit(
                       "smoking",
                       value
-                    )
-                  }
+                    );
+
+                    if (
+                      value ===
+                      "No"
+                    ) {
+                      updateHabit(
+                        "smoking_severity",
+                        null
+                      );
+                    }
+                  }}
                 />
 
-                {intake.habits.smoking ===
+                {intake.habits
+                  .smoking ===
                   "Yes" && (
                   <div className="habit-field">
                     <div className="habit-label">
@@ -1140,7 +2605,9 @@ function IntakePageThree({
                       {smokingSeverityOptions.map(
                         (value) => (
                           <button
-                            key={value}
+                            key={
+                              value
+                            }
                             type="button"
                             onClick={() =>
                               updateHabit(
@@ -1156,7 +2623,11 @@ function IntakePageThree({
                                 : ""
                             }`}
                           >
-                            {value}
+                            {
+                              smokingSeverityLabels[
+                                value
+                              ]
+                            }
                           </button>
                         )
                       )}
@@ -1167,9 +2638,12 @@ function IntakePageThree({
                 <YesNoField
                   question="Do you drink alcohol?"
                   value={
-                    intake.habits.alcohol
+                    intake.habits
+                      .alcohol
                   }
-                  onSelect={(value) =>
+                  onSelect={(
+                    value
+                  ) =>
                     updateHabit(
                       "alcohol",
                       value
@@ -1180,9 +2654,12 @@ function IntakePageThree({
                 <YesNoField
                   question="Do you regularly wash your hair with hard water?"
                   value={
-                    intake.habits.hard_water
+                    intake.habits
+                      .hard_water
                   }
-                  onSelect={(value) =>
+                  onSelect={(
+                    value
+                  ) =>
                     updateHabit(
                       "hard_water",
                       value
@@ -1200,7 +2677,9 @@ function IntakePageThree({
                     {hairWashOptions.map(
                       (value) => (
                         <button
-                          key={value}
+                          key={
+                            value
+                          }
                           type="button"
                           onClick={() =>
                             updateHabit(
@@ -1229,7 +2708,9 @@ function IntakePageThree({
                     intake.habits
                       .heating_tools_styling_chemicals
                   }
-                  onSelect={(value) =>
+                  onSelect={(
+                    value
+                  ) =>
                     updateHabit(
                       "heating_tools_styling_chemicals",
                       value
@@ -1238,17 +2719,29 @@ function IntakePageThree({
                 />
 
                 <YesNoField
-                  question="Have you had salon treatments such as colouring, straightening, or smoothing?"
+                  question="Have you had salon treatments such as colouring, straightening, smoothing, keratin, or similar chemical treatments?"
                   value={
                     intake.habits
                       .salon_treatments
                   }
-                  onSelect={(value) =>
+                  onSelect={(
+                    value
+                  ) => {
                     updateHabit(
                       "salon_treatments",
                       value
-                    )
-                  }
+                    );
+
+                    if (
+                      value ===
+                      "No"
+                    ) {
+                      updateHabit(
+                        "salon_treatment_detail",
+                        ""
+                      );
+                    }
+                  }}
                 />
 
                 {intake.habits
@@ -1267,6 +2760,7 @@ function IntakePageThree({
                       id="salon-detail"
                       type="text"
                       className="salon-detail-input"
+                      autoComplete="off"
                       value={
                         intake.habits
                           .salon_treatment_detail
@@ -1276,10 +2770,12 @@ function IntakePageThree({
                       ) =>
                         updateHabit(
                           "salon_treatment_detail",
-                          event.target.value
+                          event
+                            .target
+                            .value
                         )
                       }
-                      placeholder="For example, colouring or keratin treatment"
+                      placeholder="For example, colouring, keratin, or I don't remember the name"
                     />
                   </div>
                 )}
@@ -1293,7 +2789,9 @@ function IntakePageThree({
         <button
           type="button"
           className="page-three-back"
-          onClick={onBack}
+          onClick={
+            handleBack
+          }
         >
           <span>←</span>
           Back
@@ -1302,14 +2800,17 @@ function IntakePageThree({
         <button
           type="button"
           className="page-three-continue"
-          onClick={onContinue}
+          onClick={
+            handleContinue
+          }
         >
           Continue
           <span>→</span>
         </button>
       </nav>
 
-      {mode === "voice" && (
+      {mode ===
+        "voice" && (
         <div className="voice-overlay">
           <div className="voice-overlay-actions">
             <button
@@ -1341,85 +2842,103 @@ function IntakePageThree({
               }
             </h2>
 
-            <div className="voice-control">
-              <div
-                className={`voice-orb ${
-                  voiceStatus ===
-                  "listening"
-                    ? "voice-orb--active"
-                    : ""
-                }`}
-              >
-                <div className="voice-wave">
-                  {[0, 1, 2, 3, 4].map(
-                    (bar) => (
-                      <span
-                        key={bar}
-                        className={`voice-wave-bar ${
-                          voiceStatus ===
-                          "listening"
-                            ? "voice-wave-bar--active"
-                            : ""
-                        }`}
-                      />
-                    )
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  className="voice-mic"
-                  onClick={() => {
-                    if (
+            {!showVoiceFallback && (
+              <>
+                <div className="voice-control">
+                  <div
+                    className={`voice-orb ${
                       voiceStatus ===
                       "listening"
-                    ) {
-                      stopRecognition();
-                      setVoiceStatus("idle");
-                      return;
-                    }
+                        ? "voice-orb--active"
+                        : ""
+                    }`}
+                  >
+                    <div className="voice-wave">
+                      {[0, 1, 2, 3, 4].map(
+                        (bar) => (
+                          <span
+                            key={
+                              bar
+                            }
+                            className={`voice-wave-bar ${
+                              voiceStatus ===
+                              "listening"
+                                ? "voice-wave-bar--active"
+                                : ""
+                            }`}
+                          />
+                        )
+                      )}
+                    </div>
 
-                    speakQuestion(
-                      voiceQuestionId
-                    );
-                  }}
-                >
-                  🎙
-                </button>
-              </div>
+                    <button
+                      type="button"
+                      className="voice-mic"
+                      onClick={() => {
+                        if (
+                          !voiceSessionActiveRef.current
+                        ) {
+                          return;
+                        }
 
-              <div className="voice-status-label">
-                {voiceStatus ===
-                "speaking"
-                  ? "Asking question…"
-                  : voiceStatus ===
-                    "listening"
-                  ? "Listening…"
-                  : voiceStatus ===
-                    "processing"
-                  ? "Got it…"
-                  : "Tap to try again"}
-              </div>
-            </div>
+                        if (
+                          voiceStatus ===
+                          "listening"
+                        ) {
+                          stopRecognition();
 
-            <div className="transcript-card">
-              {transcript ? (
-                <p className="transcript-value">
-                  “{transcript}”
-                </p>
-              ) : (
-                <p className="transcript-placeholder">
-                  Your answer will appear
-                  here.
-                </p>
-              )}
-            </div>
+                          setVoiceStatus(
+                            "idle"
+                          );
+
+                          return;
+                        }
+
+                        speakQuestion(
+                          voiceQuestionId
+                        );
+                      }}
+                    >
+                      🎙
+                    </button>
+                  </div>
+
+                  <div className="voice-status-label">
+                    {voiceStatus ===
+                    "speaking"
+                      ? "Speaking…"
+                      : voiceStatus ===
+                        "listening"
+                      ? "Listening…"
+                      : voiceStatus ===
+                        "processing"
+                      ? "Got it…"
+                      : "Ready"}
+                  </div>
+                </div>
+
+                <div className="transcript-card">
+                  {transcript ? (
+                    <p className="transcript-value">
+                      “{transcript}”
+                    </p>
+                  ) : (
+                    <p className="transcript-placeholder">
+                      Your answer will appear
+                      here.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
 
             {voiceMessage && (
               <p className="voice-message">
                 {voiceMessage}
               </p>
             )}
+
+            {renderVoiceFallback()}
           </div>
         </div>
       )}
@@ -1434,7 +2953,9 @@ function YesNoField({
 }: {
   question: string;
   value: YesNo | null;
-  onSelect: (value: YesNo) => void;
+  onSelect: (
+    value: YesNo
+  ) => void;
 }) {
   return (
     <div className="habit-field">
@@ -1443,13 +2964,22 @@ function YesNoField({
       </div>
 
       <div className="two-choice-grid">
-        {(["Yes", "No"] as YesNo[]).map(
+        {(
+          [
+            "Yes",
+            "No",
+          ] as YesNo[]
+        ).map(
           (option) => (
             <button
-              key={option}
+              key={
+                option
+              }
               type="button"
               onClick={() =>
-                onSelect(option)
+                onSelect(
+                  option
+                )
               }
               className={`habit-choice ${
                 value === option
