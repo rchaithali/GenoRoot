@@ -1,7 +1,9 @@
 @import url("https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap");
+
 .intake-page button {
   font: inherit;
 }
+
 :root {
   --surface: #f7fafb;
   --surface-container-lowest: #ffffff;
@@ -565,6 +567,15 @@ button:disabled {
 
 /* Q4 */
 
+.pattern-reference-note {
+  margin: -8px 0 0;
+
+  color: var(--outline);
+
+  font-size: 13px;
+  line-height: 19px;
+}
+
 .pattern-grid {
   display: grid;
 
@@ -577,16 +588,17 @@ button:disabled {
 .pattern-card {
   position: relative;
 
-  height: 128px;
+  min-height: 242px;
 
-  padding: 8px;
+  padding: 8px 8px 12px;
 
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
 
-  gap: 8px;
+  gap: 10px;
+
+  overflow: hidden;
 
   color: var(--on-surface);
 
@@ -615,29 +627,39 @@ button:disabled {
 }
 
 .pattern-visual {
-  height: 48px;
+  width: 100%;
+  height: 180px;
+
+  overflow: hidden;
+
+  background:
+    var(--surface-container-low);
+
+  border-radius: 8px;
+}
+
+.pattern-visual img {
+  width: 100%;
+  height: 100%;
+
+  display: block;
+
+  object-fit: cover;
+  object-position: center top;
+}
+
+.pattern-visual--patchy img {
+  transform: scale(1.1);
+  transform-origin: center center;
+}
+
+.pattern-label {
+  min-height: 32px;
 
   display: flex;
   align-items: center;
   justify-content: center;
 
-  color: #bfc8c9;
-
-  font-size: 34px;
-}
-
-.pattern-visual img {
-  width: 48px;
-  height: 48px;
-
-  object-fit: contain;
-
-  opacity: 0.75;
-
-  mix-blend-mode: multiply;
-}
-
-.pattern-label {
   font-size: 12px;
   font-weight: 700;
   line-height: 16px;
@@ -646,11 +668,13 @@ button:disabled {
 .pattern-check {
   position: absolute;
 
-  top: 8px;
-  right: 8px;
+  z-index: 2;
 
-  width: 20px;
-  height: 20px;
+  top: 12px;
+  right: 12px;
+
+  width: 24px;
+  height: 24px;
 
   display: grid;
   place-items: center;
@@ -661,7 +685,12 @@ button:disabled {
 
   border-radius: 999px;
 
-  font-size: 12px;
+  box-shadow:
+    0 2px 6px
+      rgba(0, 0, 0, 0.16);
+
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* Navigation */
@@ -763,6 +792,14 @@ button:disabled {
     gap: 12px;
   }
 
+  .pattern-card {
+    min-height: 194px;
+  }
+
+  .pattern-visual {
+    height: 132px;
+  }
+
   .family-grid {
     grid-template-columns: 1fr;
   }
@@ -790,6 +827,10 @@ button:disabled {
   }
 
   .pattern-card {
-    height: 120px;
+    min-height: 178px;
+  }
+
+  .pattern-visual {
+    height: 116px;
   }
 }

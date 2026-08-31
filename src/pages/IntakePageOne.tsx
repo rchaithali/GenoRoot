@@ -2,8 +2,23 @@ import {
   familyHistoryOptions,
   hairLossPatternOptions,
 } from "../data/intakeOptions";
+
 import { useIntake } from "../context/useIntake";
 import { inferDurationFromAges } from "../utils/inference";
+
+import femaleRecedingHairline from "../assets/hair-patterns/female-receding-hairline.png";
+import femaleThinningCrown from "../assets/hair-patterns/female-thinning-crown.png";
+import femaleWideningPartLine from "../assets/hair-patterns/female-widening-part-line.png";
+import femaleDiffuseThinning from "../assets/hair-patterns/female-diffuse-thinning.png";
+import femalePatchyLoss from "../assets/hair-patterns/female-patchy-loss.png";
+import femaleSuddenShedding from "../assets/hair-patterns/female-sudden-excessive-shedding.png";
+
+import maleRecedingHairline from "../assets/hair-patterns/male-receding-hairline.png";
+import maleThinningCrown from "../assets/hair-patterns/male-thinning-crown.png";
+import maleWideningPartLine from "../assets/hair-patterns/male-widening-part-line.png";
+import maleDiffuseThinning from "../assets/hair-patterns/male-diffuse-thinning.png";
+import malePatchyLoss from "../assets/hair-patterns/male-patchy-loss.png";
+import maleSuddenShedding from "../assets/hair-patterns/male-sudden-excessive-shedding.png";
 
 import type {
   Duration,
@@ -18,35 +33,38 @@ interface IntakePageOneProps {
   onContinue: () => void;
 }
 
-/*
- * Temporary Q4 visuals.
- * The final pass will replace these with 6 male + 6 female
- * representative images without changing the stored schema values.
- */
 const patternVisuals: Record<
-  HairLossPattern,
-  { image?: string; symbol?: string }
+  Sex,
+  Record<HairLossPattern, string>
 > = {
-  "Receding hairline": {
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuD3Jdi85slkB5ZrR-ks4YxCverPsCMZKYTOOifwTLJyDN3OUiYxLciEG50TIOCREqhXy_Kp207fnf6eJvpE5RO1VE3kAxiIZjafGuFs53qPcoLMGyyZ8IeU2Bbfbd9mWCtx8LOqy0Gg2DtSpg87lqKvykSjl0IwT7U6zlP0WZoZahX4Ov3HJxwQ6KyWJ-lFNvekkwv-F4pJoegYiyQEfhaUjyx3EyuQKCjqz6LDKHw2_qCQ1T2k6-qk",
+  Female: {
+    "Receding hairline":
+      femaleRecedingHairline,
+    "Thinning at crown":
+      femaleThinningCrown,
+    "Widening part line":
+      femaleWideningPartLine,
+    "Diffuse thinning":
+      femaleDiffuseThinning,
+    "Patchy loss":
+      femalePatchyLoss,
+    "Sudden excessive shedding":
+      femaleSuddenShedding,
   },
-  "Thinning at crown": {
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuDWuvnQsVo1wbCQXA-zA2E9hskzIZVqsZwWJLvYlPPaqhDiATDl3F46V9IvfVOg6Lk4sNBgwjIal0TDTtcHgaWQfYbPDv8XDEjRgwZ3sDVXcwYHeGM_cjEpURPy_s5uLkfn1oN_AH5rKNNrQXG-NycwHxqyDuhmcK1PsUAHwqY7niDTWmQM2Zsj9-p6_QAO89LIqa8UZBaWgluCb2cIUyk1QEHjSZqdq_R_HvCRQ4ZU6gmBeos1hq9Z",
-  },
-  "Widening part line": {
-    image:
-      "https://lh3.googleusercontent.com/aida-public/AB6AXuAhrkqSGJY1KGrl-u8_EKl2IiLUBvUhvFn1hqECB8Yg8dw8dQwhvCfBZsXpmMoOm8u13taM65wwf-bNqSsWROkCPmKFxwiteqt2dhMB6KnpVa7OcNkm9YfVicXNHNoqOCVCJNz7VDKmjbJ0TCjVqV4F3OaEVEUqhRSNAeXILD6tSkQn9QkVf47q73VRbj2u9tl3MgXcb8Y68zlDlZPmoj-EaiA3K9ru4SdsJT3ui8aIlp9eZB2bn6D-",
-  },
-  "Diffuse thinning": {
-    symbol: "◌",
-  },
-  "Patchy loss": {
-    symbol: "•••",
-  },
-  "Sudden excessive shedding": {
-    symbol: "◇",
+
+  Male: {
+    "Receding hairline":
+      maleRecedingHairline,
+    "Thinning at crown":
+      maleThinningCrown,
+    "Widening part line":
+      maleWideningPartLine,
+    "Diffuse thinning":
+      maleDiffuseThinning,
+    "Patchy loss":
+      malePatchyLoss,
+    "Sudden excessive shedding":
+      maleSuddenShedding,
   },
 };
 
@@ -61,10 +79,11 @@ function IntakePageOne({
 }: IntakePageOneProps) {
   const { intake, updateField } = useIntake();
 
-  const durationInference = inferDurationFromAges(
-    intake.currentAge,
-    intake.age_hair_loss_began
-  );
+  const durationInference =
+    inferDurationFromAges(
+      intake.currentAge,
+      intake.age_hair_loss_began
+    );
 
   function digitsOnly(value: string) {
     return value.replace(/\D/g, "");
@@ -75,7 +94,10 @@ function IntakePageOne({
 
     if (value === "") {
       updateField("currentAge", null);
-      updateField("age_hair_loss_began", null);
+      updateField(
+        "age_hair_loss_began",
+        null
+      );
       updateField("duration", null);
       return;
     }
@@ -96,7 +118,10 @@ function IntakePageOne({
       intake.age_hair_loss_began !== null &&
       intake.age_hair_loss_began > parsed
     ) {
-      updateField("age_hair_loss_began", null);
+      updateField(
+        "age_hair_loss_began",
+        null
+      );
       updateField("duration", null);
     }
   }
@@ -105,7 +130,10 @@ function IntakePageOne({
     const value = digitsOnly(rawValue);
 
     if (value === "") {
-      updateField("age_hair_loss_began", null);
+      updateField(
+        "age_hair_loss_began",
+        null
+      );
       updateField("duration", null);
       return;
     }
@@ -123,12 +151,11 @@ function IntakePageOne({
       return;
     }
 
-    updateField("age_hair_loss_began", parsed);
+    updateField(
+      "age_hair_loss_began",
+      parsed
+    );
 
-    /*
-     * Q2 depends on Q1.
-     * Clear an older duration answer whenever Q1 changes.
-     */
     updateField("duration", null);
   }
 
@@ -136,16 +163,22 @@ function IntakePageOne({
     updateField("sex", sex);
   }
 
-  function selectDuration(duration: Duration) {
+  function selectDuration(
+    duration: Duration
+  ) {
     updateField("duration", duration);
   }
 
   function toggleFamilyHistory(
     value: FamilyHistory
   ) {
-    const current = intake.family_history;
+    const current =
+      intake.family_history;
 
-    if (value === "No known family history") {
+    if (
+      value ===
+      "No known family history"
+    ) {
       updateField(
         "family_history",
         current.includes(value)
@@ -156,10 +189,12 @@ function IntakePageOne({
       return;
     }
 
-    const withoutNone = current.filter(
-      (item) =>
-        item !== "No known family history"
-    );
+    const withoutNone =
+      current.filter(
+        (item) =>
+          item !==
+          "No known family history"
+      );
 
     updateField(
       "family_history",
@@ -203,7 +238,6 @@ function IntakePageOne({
       </header>
 
       <main className="intake-content">
-        {/* Context */}
         <section className="section-stack">
           <div className="section-heading">
             <span className="eyebrow">
@@ -220,7 +254,6 @@ function IntakePageOne({
             </p>
           </div>
 
-          {/* Current age */}
           <div className="question-card">
             <label
               className="large-question"
@@ -238,7 +271,9 @@ function IntakePageOne({
                 autoComplete="off"
                 maxLength={3}
                 placeholder="00"
-                value={intake.currentAge ?? ""}
+                value={
+                  intake.currentAge ?? ""
+                }
                 onChange={(event) =>
                   setCurrentAge(
                     event.target.value
@@ -250,41 +285,39 @@ function IntakePageOne({
             </div>
           </div>
 
-          {/* Sex */}
           <div className="question-card">
             <div className="large-question">
               Assigned sex at birth
             </div>
 
             <div className="sex-grid">
-              {(["Female", "Male"] as Sex[]).map(
-                (sex) => {
-                  const selected =
-                    intake.sex === sex;
+              {(
+                ["Female", "Male"] as Sex[]
+              ).map((sex) => {
+                const selected =
+                  intake.sex === sex;
 
-                  return (
-                    <button
-                      key={sex}
-                      type="button"
-                      className={`large-choice ${
-                        selected
-                          ? "large-choice--selected"
-                          : ""
-                      }`}
-                      onClick={() =>
-                        selectSex(sex)
-                      }
-                    >
-                      {sex}
-                    </button>
-                  );
-                }
-              )}
+                return (
+                  <button
+                    key={sex}
+                    type="button"
+                    className={`large-choice ${
+                      selected
+                        ? "large-choice--selected"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      selectSex(sex)
+                    }
+                  >
+                    {sex}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </section>
 
-        {/* Section A */}
         <section className="section-stack section-a">
           <div className="section-heading section-heading--small">
             <span className="eyebrow">
@@ -296,18 +329,18 @@ function IntakePageOne({
             </h2>
           </div>
 
-          {/* Q1 */}
           <div className="question-card">
             <label
               className="question-text"
               htmlFor="onset-age"
             >
-              At what age did you first notice
-              hair fall?
+              At what age did you first
+              notice hair fall?
             </label>
 
             <p className="question-helper">
-              An estimate is completely fine.
+              An estimate is completely
+              fine.
             </p>
 
             <div className="number-field number-field--centered">
@@ -320,7 +353,8 @@ function IntakePageOne({
                 maxLength={3}
                 placeholder="00"
                 value={
-                  intake.age_hair_loss_began ??
+                  intake
+                    .age_hair_loss_began ??
                   ""
                 }
                 onChange={(event) =>
@@ -332,7 +366,6 @@ function IntakePageOne({
             </div>
           </div>
 
-          {/* Q2 */}
           <div className="question-card duration-card">
             {durationInference.suggested && (
               <div className="suggestion-label">
@@ -350,23 +383,31 @@ function IntakePageOne({
               {durationOptions.map(
                 (duration) => {
                   const selected =
-                    intake.duration === duration;
+                    intake.duration ===
+                    duration;
 
                   const unavailable =
-                    intake.currentAge !== null &&
-                    intake.age_hair_loss_began !==
+                    intake.currentAge !==
                       null &&
-                    !durationInference.possibleOptions.includes(
-                      duration
-                    );
+                    intake
+                      .age_hair_loss_began !==
+                      null &&
+                    !durationInference
+                      .possibleOptions.includes(
+                        duration
+                      );
 
                   return (
                     <button
                       key={duration}
                       type="button"
-                      disabled={unavailable}
+                      disabled={
+                        unavailable
+                      }
                       onClick={() =>
-                        selectDuration(duration)
+                        selectDuration(
+                          duration
+                        )
                       }
                       className={`radio-option ${
                         selected
@@ -399,7 +440,6 @@ function IntakePageOne({
             </div>
           </div>
 
-          {/* Q3 */}
           <div className="question-card">
             <div className="question-text">
               Does hair loss run in your
@@ -476,7 +516,9 @@ function IntakePageOne({
                         {selected && "✓"}
                       </span>
 
-                      <span>{label}</span>
+                      <span>
+                        {label}
+                      </span>
                     </button>
                   );
                 }
@@ -484,15 +526,20 @@ function IntakePageOne({
             </div>
           </div>
 
-          {/* Q4 */}
           <div className="question-card">
             <div className="question-text">
-              Which of these looks most like
-              what you've noticed?{" "}
+              Which of these looks most
+              like what you've noticed?{" "}
               <span className="question-note">
                 (Select all that apply)
               </span>
             </div>
+
+            <p className="pattern-reference-note">
+              Reference images only. Hair-loss
+              patterns can look different from
+              person to person.
+            </p>
 
             <div className="pattern-grid">
               {hairLossPatternOptions.map(
@@ -503,7 +550,11 @@ function IntakePageOne({
                     );
 
                   const visual =
-                    patternVisuals[pattern];
+                    intake.sex !== null
+                      ? patternVisuals[
+                          intake.sex
+                        ][pattern]
+                      : null;
 
                   return (
                     <button
@@ -515,21 +566,25 @@ function IntakePageOne({
                           : ""
                       }`}
                       onClick={() =>
-                        togglePattern(pattern)
+                        togglePattern(
+                          pattern
+                        )
                       }
                     >
-                      <div className="pattern-visual">
-                        {visual.image ? (
-                          <img
-                            src={visual.image}
-                            alt=""
-                          />
-                        ) : (
-                          <span>
-                            {visual.symbol}
-                          </span>
-                        )}
-                      </div>
+                      <div
+  className={`pattern-visual ${
+    pattern === "Patchy loss"
+      ? "pattern-visual--patchy"
+      : ""
+  }`}
+>
+  {visual && (
+    <img
+      src={visual}
+      alt={`${pattern} reference example`}
+    />
+  )}
+</div>
 
                       <span className="pattern-label">
                         {pattern ===

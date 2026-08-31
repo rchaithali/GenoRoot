@@ -29,13 +29,13 @@ For a detailed explanation of the interaction decision, constraint, and possible
 ## Links
 
 **Live application:**  
-[ADD VERCEL URL]
+[https://genoroot-intake-lovat.vercel.app]
 
 **Evaluator structured output:**  
-[ADD VERCEL URL]/#/output
+[https://genoroot-intake-lovat.vercel.app/#/output]/#/output
 
 **GitHub repository:**  
-[ADD PUBLIC GITHUB REPOSITORY URL]
+[https://github.com/rchaithali/GenoRoot]
 
 **2-minute walkthrough:**  
 [ADD SCREEN RECORDING URL]
