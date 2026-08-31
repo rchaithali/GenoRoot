@@ -37,8 +37,8 @@ For a detailed explanation of the interaction decision, constraint, and possible
 **GitHub repository:**  
 [https://github.com/rchaithali/GenoRoot]
 
-**2-minute walkthrough:**  
-[ADD SCREEN RECORDING URL]
+**walkthrough:**  
+[https://drive.google.com/file/d/1se_V-SD__Cv1Yrywvsap_aGtH3Q9SS33/view?usp=sharing]
 
 > The evaluator output is intentionally separate from the patient-facing experience. After a successful intake submission, `/#/output` displays the exact structured JSON produced by the application.
 
